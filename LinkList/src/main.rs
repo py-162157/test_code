@@ -1,12 +1,24 @@
-struct List<T> {
+use std::ptr;
+
+pub struct List<T> {
     len: usize,
-    next: Option<Box<Node<T>>>,
+    head: Node<T>,//error：head为Node<T>类型，不具备take()函数
+    tail: *mut Node<T>,//使用小范围的unsafe实现
 }
 
 #[derive(Clone, Debug)]
-struct Node<T> {
-    value: T,
-    next: Option<Box<Node<T>>>,
+pub struct Node<T> {
+    pub value: T,
+    pub next: Option<Box<Node<T>>>,
+}
+
+impl<T> Drop for List<T> {
+    fn drop(&mut self) {
+        let mut now_node = self.head.next.take();
+        while let Some(mut boxed_node) = now_node {
+            now_node = boxed_node.next.take();
+        }
+    }
 }
 
 impl<T: std::fmt::Display> Node<T> {
@@ -16,9 +28,26 @@ impl<T: std::fmt::Display> Node<T> {
             next: None,
         }
     }
+
+    fn take(self) -> Option<Box<Node<T>>> {
+        Some(Box::new(self))
+    }
     
     fn set_next(&mut self, elem: T) {
         self.next = Some(Box::new(Node::new(elem)));
+    }
+
+    fn insert_in_next(&mut self, elem: T) {
+        if let Some(ref next_node) = self.next {
+            let new_node = Node {
+                value: elem,
+                next: self.next.take(),
+            };
+
+            self.next = Some(Box::new(new_node));
+        } else {
+            self.set_next(elem);
+        }
     }
 
     fn get_last(&mut self) -> &mut Self {
@@ -38,77 +67,86 @@ impl<T: std::fmt::Display> Node<T> {
     }
 }
 
-impl<T: std::fmt::Display> List<T> {
-    fn new() ->Self {
+impl<T: std::fmt::Display + std::clone::Clone + std::cmp::PartialEq> List<T> {
+    fn new(info: T) ->Self {
         List {
             len: 0,
-            next: None,
+            head: Node {
+                value: info,
+                next: None,
+            },
+            tail: ptr::null_mut(),
         }
     }
 
-    fn set_next(&mut self, elem: T) {
-        self.next = Some(Box::new(Node::new(elem)));
-    }
+    //self.head.next: Option<Box<Node<T>>>
+    fn head_insert(&mut self, elem: T) {
+        let new_node = Node {
+            value: elem,
+            next: self.head.next.take(),
+        };
 
-    fn get_next(&mut self) -> Option<&mut Node<T>> {
-        if let Some(ref mut x) = self.next {
-            Some(x)
-        } else {
-            None
-        }
-    }
-
-    fn get_last(&mut self) -> Option<&mut Node<T>> {
-        if let Some(ref mut x) = self.next {
-            Some(x.get_last())
-        } else {
-            None
-        }
+        self.head.next = Some(Box::new(new_node));
+        self.len += 1;
     }
 
     fn rear_insert(&mut self, elem: T) {
-        if self.len != 0 {
-            if let Some(ref mut last_node) = self.get_last() {
-                last_node.set_next(elem);
-                self.len += 1;
-            } else {
-                println!("Error: Faild to get the last node when it's not empty!");
+        let mut new_tail = Box::new(Node {
+            value: elem,
+            next: None,
+        });
+
+        let raw_tail: *mut _ = &mut *new_tail;
+        
+        if !self.tail.is_null() {
+            unsafe {
+                (*self.tail).next = Some(new_tail);
             }
         } else {
-            self.set_next(elem);
-            self.len += 1;
+            self.head.next = Some(new_tail);
         }
+
+        self.tail = raw_tail;
+        self.len += 1;
     }
 
-    /*fn insert_in_next(node: Option<Box<List>>, value: T) {
-        if let Some(ref mut x) = node.next {
-            let mut temp = None;
-            let mut now_node = node;
-            temp = 
-        } else {
-
-        }
-    }*/
+    fn insert_by_key(&mut self, key: T, elem: T) {//在指定元素key之后插入元素elem
+         if let mut ptr = self.head.next.as_mut().unwrap() {
+            let mut count: usize = 1;
+            loop {
+                if ptr.value == key {
+                    ptr.insert_in_next(elem);
+                    self.len += 1;
+                    break;
+                } else { 
+                    count += 1;
+                    if count > self.len {
+                        println!("Can't find the element {} ", key);
+                        break;
+                    }
+                    ptr = ptr.next.as_mut().unwrap();
+                }
+            }
+         } else {
+             println!("The List is empty!");
+         }  
+    }
 
     fn print_all_element(&mut self) {
         if self.len == 0 {
             println!("The linklist is empty!");
         } else {
-            if let Some(ref mut x) = self.next {
-                println!("{} ", x.value);
-                x.print_all_element();
-            } else {
-                println!("travel finished")
-            }
+            self.head.print_all_element();
         }
+        println!("total length is {}", self.len);
     }
 }
 
 fn main() {
-     let mut L = List::new();
+     let mut L = List::new(0);
      //test
      L.rear_insert(1);
-     L.rear_insert(2);
-     L.rear_insert(3);
+     L.head_insert(2);
+     L.insert_by_key(3, 6);
      L.print_all_element();
 }

@@ -1,0 +1,9 @@
+[package]
+name = "Vec"
+version = "0.1.0"
+authors = ["py-162157 <765007043@qq.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

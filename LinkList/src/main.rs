@@ -6,6 +6,50 @@ pub struct List<T> {
     tail: *mut Node<T>,//使用小范围的unsafe实现
 }
 
+pub struct Iter<'a, T> {
+    next: Option<&'a Node<T>>,
+}
+
+pub struct IterMut<'a, T> {
+    next: Option<&'a mut Node<T>>,
+}
+
+impl<T> List<T> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+        Iter {
+            next: self.head.next.as_ref().map(|node| &**node)
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+        IterMut {
+            next: self.head.next.as_mut().map(|node| &mut **node)
+        }
+    }
+}
+
+impl<'a, T> Iterator for IterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.take().map(|node| {
+            self.next = node.next.as_mut().map(|node| &mut **node);
+            &mut node.value
+        })
+    }
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.map(|node| {
+            self.next = node.next.as_ref().map(|node| &**node);
+            &node.value
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Node<T> {
     pub value: T,
@@ -55,15 +99,6 @@ impl<T: std::fmt::Display> Node<T> {
             return x.get_last();
         }
         self
-    }
-
-    fn print_all_element(&mut self) {
-        if let Some(ref mut x) = self.next {
-            println!("{} ", x.value);
-            x.print_all_element();
-        } else {
-            //println!("{} ", self.value);
-        }
     }
 }
 
@@ -132,21 +167,31 @@ impl<T: std::fmt::Display + std::clone::Clone + std::cmp::PartialEq> List<T> {
          }  
     }
 
-    fn print_all_element(&mut self) {
-        if self.len == 0 {
-            println!("The linklist is empty!");
+    fn delete(&mut self) {
+        if let Some(ref mut x) = self.head.next {
+            self.head.next = x.next.take();
+            self.len -= 1;
         } else {
-            self.head.print_all_element();
+            self.head.next = None;
+            self.len -= 1;
         }
-        println!("total length is {}", self.len);
+    }
+
+    fn print_all_element(&mut self) {
+        let mut iter = self.iter();
+        for value in iter {
+            println!("{}", value);
+        }
     }
 }
 
 fn main() {
      let mut L = List::new(0);
      //test
-     L.rear_insert(1);
+     L.head_insert(1);
      L.head_insert(2);
-     L.insert_by_key(3, 6);
+     let mut iter = L.iter();
+     println!("{}", iter.next().unwrap());
+     println!("{}", iter.next().unwrap());
      L.print_all_element();
 }

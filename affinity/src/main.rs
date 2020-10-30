@@ -1,70 +1,37 @@
 use rand::{Rng, thread_rng};
 use std::collections::HashMap;
 use ndarray::{Array2, ArrayView};
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 use std::clone::Clone;
+use std::marker::Copy;
+use std::hash::Hash;
+use std::cmp::Eq;
 
 //需要手动实现groupby函数
 
-struct ArrayUnion {
-    group: HashMap::<usize, usize>,
-    size: HashMap::<usize, usize>,
-    items: HashMap::<usize, Vec::<usize>>,
+struct ArrayUnion<T> {
+    group: HashMap::<T, T>,
+    size: HashMap::<T, usize>,
+    items: HashMap::<T, Vec::<T>>,
 }
 
-impl Drop for ArrayUnion {
-    fn drop(&mut self) {
-        let group_key: Vec::<usize> = self.group.keys().into_iter().map(|&x| x).collect();
-        let size_key: Vec::<usize> = self.size.keys().into_iter().map(|&x| x).collect();
-        let items_key: Vec::<usize> = self.items.keys().into_iter().map(|&x| x).collect();
-        for g in group_key {
-            self.group.remove(&g);
-        }
-        for s in size_key {
-            self.size.remove(&s);
-        }
-        for i in items_key {
-            self.size.remove(&i);
-        }
-    }
-}
-
-struct Affinity {
+struct Affinity<T> {
     k: usize,
-    E: Vec::<Edge>,
-    V: Vec::<usize>,//目前所有节点均为已知，故不需要集合类型
-    uf: ArrayUnion,
-    clost_neighbors: HashMap::<usize, usize>,
-    merged: HashMap::<usize, Option::<usize>>//使用没有value的hashmap作为集合类型
+    E: Vec::<Edge<T>>,
+    V: Vec::<T>,//目前所有节点均为已知，故不需要集合类型
+    uf: ArrayUnion::<T>,
+    clost_neighbors: HashMap::<T, T>,
+    merged: HashMap::<T, Option::<T>>//使用没有value的hashmap作为集合类型
 }
 
-impl Drop for Affinity {
-    fn drop(&mut self) {
-        while !self.E.is_empty() {
-            self.E.remove(0);
-        }
-        while !self.V.is_empty() {
-            self.V.remove(0);
-        }
-        let clost_key: Vec::<usize> = self.clost_neighbors.keys().into_iter().map(|&x| x).collect();
-        let merged_key: Vec::<usize> = self.merged.keys().into_iter().map(|&x| x).collect();
-        for c in clost_key {
-            self.clost_neighbors.remove(&c);
-        }
-        for m in merged_key {
-            self.merged.remove(&m);
-        }
-    }
-}
-
-impl Affinity {
-    fn new_and_init(edges: Vec<Edge>, k: usize) -> Affinity {
-        let mut v_set = HashMap::<usize, Option<usize>>::new();
+impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
+    fn new_and_init(edges: Vec<Edge<T>>, k: usize) -> Self {
+        let mut v_set = HashMap::<T, Option<T>>::new();
         for e in edges.iter() {
             v_set.insert(e.start, None);
             v_set.insert(e.end, None);
         }
-        let v: Vec::<usize> = v_set.keys().into_iter().map(|&x| x).collect();
+        let v: Vec::<T> = v_set.keys().into_iter().map(|&x| x).collect();
         //println!("number of vertexs is:{}", v.len());
         Affinity {
             k: k,
@@ -82,7 +49,7 @@ impl Affinity {
         }
     }
 
-    fn merge_with_cloest_neighbors(&mut self, v: usize, mut v_stack: HashMap::<usize, Option<usize>>) -> HashMap::<usize, Option<usize>>{
+    fn merge_with_cloest_neighbors(&mut self, v: T, mut v_stack: HashMap::<T, Option<T>>) -> HashMap::<T, Option<T>>{
         if self.merged.contains_key(&v) {
             return v_stack;//v_stack记录该函数的栈里目前都寻找了哪些v，避免死循环
         }
@@ -117,11 +84,11 @@ impl Affinity {
     }
 
     fn fragment_process(&mut self, round: u32) {
-        let init_group: Vec::<usize> = self.uf.get_items();
+        let init_group: Vec::<T> = self.uf.get_items();
         for group_name in init_group {
             if self.uf.items.contains_key(&group_name) {
                 if *self.uf.size.get(&group_name).unwrap() < 2usize.pow(round) {
-                    let mut edges_of_group = Vec::<Edge>::new();
+                    let mut edges_of_group = Vec::<Edge<T>>::new();
                     for e in &self.E {
                         if e.start == group_name {
                             edges_of_group.push(e.clone());
@@ -139,7 +106,7 @@ impl Affinity {
     }
 
     fn edges_update(&mut self) {
-        let mut new_edges = Vec::<Edge>::new();
+        let mut new_edges = Vec::<Edge<T>>::new();
             for e in &self.E {
                 if self.uf.find(e.start) != self.uf.find(e.end) {
                     new_edges.push(Edge {
@@ -163,8 +130,8 @@ impl Affinity {
             self.merged = HashMap::new();
             let selfe = &self.E;
             let mut EEV = edges_of_every_vertexs(selfe);
-            let mut min_edges = Vec::<Edge>::new();
-            let mut v_stack = HashMap::<usize, Option<usize>>::new();
+            let mut min_edges = Vec::<Edge<T>>::new();
+            let mut v_stack = HashMap::<T, Option<T>>::new();
 
             for value in EEV.values_mut() {
                 value.sort_by_key(|x| x.weight);
@@ -197,8 +164,8 @@ impl Affinity {
     }
 }
 
-fn edges_of_every_vertexs(edges: &Vec::<Edge>) -> HashMap::<usize, Vec::<Edge>> {//找到每个点的所有边
-    let mut edges_of_v = HashMap::<usize, Vec::<Edge>>::new();
+fn edges_of_every_vertexs<T:Debug + Display + Copy + Hash + Eq> (edges: &Vec::<Edge<T>>) -> HashMap::<T, Vec::<Edge<T>>> {//找到每个点的所有边
+    let mut edges_of_v = HashMap::<T, Vec::<Edge<T>>>::new();
     for edge in edges {
         if edges_of_v.contains_key(&edge.start) {
             edges_of_v.get_mut(&edge.start).unwrap().push(edge.clone());
@@ -209,8 +176,8 @@ fn edges_of_every_vertexs(edges: &Vec::<Edge>) -> HashMap::<usize, Vec::<Edge>> 
     edges_of_v
 }
 
-impl ArrayUnion {
-    fn new_and_init(V: Vec::<usize>) -> Self {
+impl<T:Debug + Display + Copy + Hash + Eq> ArrayUnion<T> {
+    fn new_and_init(V: Vec::<T>) -> Self {
         let mut ArrUni = ArrayUnion {
             group: HashMap::new(),
             size: HashMap::new(),
@@ -224,7 +191,7 @@ impl ArrayUnion {
         ArrUni
     }
 
-    fn find(&self, target: usize) -> usize {//返回包含target的group id
+    fn find(&self, target: T) -> T {//返回包含target的group id
          if let Some(gp) = self.group.get(&target) {
              *gp
          } else {
@@ -232,7 +199,7 @@ impl ArrayUnion {
          }
     }
 
-    fn union(&mut self, mut a: usize, mut b: usize) {
+    fn union(&mut self, mut a: T, mut b: T) {
         if !(self.items.contains_key(&a) && self.items.contains_key(&b)) {
             //panic!("Error: a and b are not both in items");
             return ;
@@ -263,12 +230,12 @@ impl ArrayUnion {
         self.items.remove(&a);
     }
 
-    fn get_items(&self) -> Vec::<usize> {
+    fn get_items(&self) -> Vec::<T> {
         self.items.keys().into_iter().map(|&x| x).collect()//将hashmap中所有key或者value输出的方法
     }
 
-    fn get_partitions(self) ->Vec::<Vec::<usize>> {//该函数仅调用一次
-        let mut partitions = Vec::<Vec::<usize>>::new();
+    fn get_partitions(self) ->Vec::<Vec::<T>> {//该函数仅调用一次
+        let mut partitions = Vec::<Vec::<T>>::new();
         for partition in self.items.values() {
             partitions.push((*partition).clone());
         }
@@ -283,13 +250,13 @@ struct Graph {
     matrix: Array2::<usize>
 }
 
-struct Edge {
-    start: usize,
-    end: usize,
+struct Edge<T> {
+    start: T,
+    end: T,
     weight: usize
 }
 
-impl Edge {
+impl<T:Debug + Display + Copy + Hash + Eq> Edge<T> {
     fn clone(&self) -> Self {
         Edge {
             start: self.start,
@@ -299,10 +266,10 @@ impl Edge {
     }
 }
 
-fn MST(edges: &mut Vec::<Edge>) -> Vec::<Edge> {
-    let mut mst = Vec::<Edge>::new();
+fn MST<T:Debug + Display + Copy + Hash + Eq> (edges: &mut Vec::<Edge<T>>) -> Vec::<Edge<T>> {
+    let mut mst = Vec::<Edge<T>>::new();
     edges.sort_by_key(|x| x.weight);
-    let mut v_set = HashMap::<usize, Option<usize>>::new();//使用空value的hashmap作为集合
+    let mut v_set = HashMap::<T, Option<usize>>::new();//使用空value的hashmap作为集合
     for e in edges.iter() {//直接使用edge调用into_iter，发生所有权转移
         v_set.insert(e.start, None);
         v_set.insert(e.end, None);
@@ -321,10 +288,10 @@ fn MST(edges: &mut Vec::<Edge>) -> Vec::<Edge> {
     mst
 }
 
-fn partition1(v_edges: &HashMap::<usize, Vec::<Edge>>, k: usize) 
-                    ->Vec::<(usize, (usize, Edge))> {
+fn partition1<T:Debug + Display + Copy + Hash + Eq> (v_edges: &HashMap::<usize, Vec::<Edge<T>>>, k: usize) 
+                    ->Vec::<(T, (usize, Edge<T>))> {
     //对相同起点的边进行随机划分，并分配partition_key
-    let mut out = Vec::<(usize, (usize, Edge))>::new();
+    let mut out = Vec::<(T, (usize, Edge<T>))>::new();
     let mut rng = thread_rng();
     let partition_key =  rng.gen_range(0, k);
     for (v, edges) in v_edges.iter() {
@@ -335,8 +302,8 @@ fn partition1(v_edges: &HashMap::<usize, Vec::<Edge>>, k: usize)
     out
 }
 
-fn group_by_end(edges: Vec::<(usize, (usize, Edge))>) -> HashMap::<usize, Vec::<(usize, Edge)>> {
-    let mut out = HashMap::<usize, Vec::<(usize, Edge)>>::new();
+fn group_by_end<T:Debug + Display + Copy + Hash + Eq> (edges: Vec::<(usize, (usize, Edge<T>))>) -> HashMap::<usize, Vec::<(usize, Edge<T>)>> {
+    let mut out = HashMap::<usize, Vec::<(usize, Edge<T>)>>::new();
     for edge in edges {
         if out.contains_key(&edge.0) {
             out.get_mut(&edge.0).unwrap().push((edge.1.0, edge.1.1));
@@ -347,9 +314,9 @@ fn group_by_end(edges: Vec::<(usize, (usize, Edge))>) -> HashMap::<usize, Vec::<
     out
 }
 
-fn group_and_MST(edges: Vec::<((usize, usize), Edge)>) -> Vec::<Edge> {
-    let mut cluster_edges = HashMap::<(usize, usize), Vec::<Edge>>::new();
-    let mut mst = Vec::<Edge>::new();
+fn group_and_MST<T:Debug + Display + Copy + Hash + Eq> (edges: Vec::<((usize, usize), Edge<T>)>) -> Vec::<Edge<T>> {
+    let mut cluster_edges = HashMap::<(usize, usize), Vec::<Edge<T>>>::new();
+    let mut mst = Vec::<Edge<T>>::new();
     for e in edges {
         if cluster_edges.contains_key(&e.0) {
             cluster_edges.get_mut(&e.0).unwrap().push(e.1);
@@ -368,10 +335,10 @@ fn group_and_MST(edges: Vec::<((usize, usize), Edge)>) -> Vec::<Edge> {
     mst
 }
 
-fn partition2(v_edges: &HashMap::<usize, Vec::<(usize, Edge)>>, k: usize) 
-                    -> Vec::<((usize, usize), Edge)> {
+fn partition2<T:Debug + Display + Copy + Hash + Eq> (v_edges: &HashMap::<usize, Vec::<(usize, Edge<T>)>>, k: usize) 
+                    -> Vec::<((usize, usize), Edge<T>)> {
     //对相同终点的边进行随机划分，并分配first_partition
-    let mut out = Vec::<((usize, usize), Edge)>::new();
+    let mut out = Vec::<((usize, usize), Edge<T>)>::new();
     for (v, edges) in v_edges.iter() {
         let mut rng = thread_rng();
         let partition_key =  rng.gen_range(0, k);
@@ -384,11 +351,11 @@ fn partition2(v_edges: &HashMap::<usize, Vec::<(usize, Edge)>>, k: usize)
     out
 }
 
-fn make_random_graph_matrix(verticle: usize) -> (Array2::<usize>, Vec::<Edge>) {//随机生成一个图，usize类型不满足ndarray::IntoDimension特征，故verticle用usize
+fn make_random_graph_matrix<T:Debug + Display + Copy + Hash + Eq> (verticle: usize) -> (Array2::<usize>, Vec::<Edge<usize>>) {//随机生成一个图，usize类型不满足ndarray::IntoDimension特征，故verticle用usize
     let mut data = Array2::<usize>::zeros((verticle, verticle));
     let mut i = 0;
     let mut j = 0;
-    let mut edges = Vec::<Edge>::new();
+    let mut edges = Vec::<Edge<usize>>::new();
     while i < verticle {
         j = 0;
         while j < verticle {
@@ -425,7 +392,7 @@ fn make_random_graph_matrix(verticle: usize) -> (Array2::<usize>, Vec::<Edge>) {
     (data, edges)
 }
 
-fn print_edges(edges: &Vec::<Edge>) {
+fn print_edges<T:Debug + Display + Copy + Hash + Eq> (edges: &Vec::<Edge<T>>) {
     for edge in edges {
         println!("start:{}, end:{}, weight:{}" ,edge.start, edge.end, edge.weight);
     }
@@ -433,7 +400,8 @@ fn print_edges(edges: &Vec::<Edge>) {
 
 fn main() {
     let epsilon = 0.4;//设定参数一，小于一定阈值会导致closet_neighbor出现死循环
-    let (random_matrix, mut edges) = make_random_graph_matrix(10000);//设定参数二,随机生成图的顶点数
+    let (random_matrix, mut edges) = make_random_graph_matrix::<usize>(1000);//设定参数二,随机生成图的顶点数
+    println!("生成随机图完成");
     let n = random_matrix.ncols() as f32;
     let mut m = edges.len() as f32;
     let mut c: f32 = m.ln().ceil() / n.ln().ceil() - 1.0;

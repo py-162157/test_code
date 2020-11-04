@@ -243,13 +243,6 @@ impl<T:Debug + Display + Copy + Hash + Eq> ArrayUnion<T> {
     }
 }
 
-struct Graph {
-    vex: Vec<usize>,
-    vexnum: usize,
-    edgenum: usize,
-    matrix: Array2::<usize>
-}
-
 struct Edge<T> {
     start: T,
     end: T,

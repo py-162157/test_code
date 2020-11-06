@@ -24,7 +24,7 @@ pub mod affinity_clustering {
     }
     
     impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
-        fn new_and_init(edges: Vec<Edge<T>>, k: usize) -> Self {
+        pub fn new_and_init(edges: Vec<Edge<T>>, k: usize) -> Self {
             let mut v_set = HashMap::<T, Option<T>>::new();
             for e in edges.iter() {
                 v_set.insert(e.start, None);
@@ -45,6 +45,7 @@ pub mod affinity_clustering {
         pub fn print_all_clusters(&self) {
             for (name, clusters) in self.uf.items.iter() {
                 println!("cluster{}: {:?}", name, clusters);
+                println!();
             }
         }
     

@@ -24,7 +24,7 @@ pub mod affinity_clustering {
     }
     
     impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
-        pub fn new_and_init(edges: Vec<Edge<T>>, k: usize) -> Self {
+        pub fn new_and_init(edges: &Vec<Edge<T>>, k: usize) -> Self {
             let mut v_set = HashMap::<T, Option<T>>::new();
             for e in edges.iter() {
                 v_set.insert(e.start, None);
@@ -34,7 +34,7 @@ pub mod affinity_clustering {
             //println!("number of vertexs is:{}", v.len());
             Affinity {
                 k: k,
-                E: edges,
+                E: edges.clone(),
                 V: v.clone(),
                 uf: ArrayUnion::new_and_init(v),
                 clost_neighbors: HashMap::new(),
@@ -125,7 +125,7 @@ pub mod affinity_clustering {
             let mut count = 0;
             while number_of_clusters > self.k {
                 count += 1;
-                println!("-----------------------------------after {} rounds-------------------------------", count);
+                println!("-----------------------------------after {} rounds clustering-------------------------------", count);
                 self.clost_neighbors = HashMap::new();
                 self.merged = HashMap::new();
                 let selfe = &self.E;
@@ -254,7 +254,17 @@ pub mod affinity_clustering {
         pub weight: usize
     }
     
-    impl<T:Debug + Display + Copy + Hash + Eq> Edge<T> {
+    /*impl<T:Debug + Display + Copy + Hash + Eq> Edge<T> {
+        fn clone(&self) -> Self {
+            Edge {
+                start: self.start,
+                end: self.end,
+                weight: self.weight,
+            }
+        }
+    }*/
+
+    impl<T:Debug + Display + Copy + Hash + Eq> Clone for Edge<T> {
         fn clone(&self) -> Self {
             Edge {
                 start: self.start,
@@ -418,9 +428,9 @@ pub mod affinity_clustering {
             m = edges.len() as f32;
             println!("total edges of MST is:{}, present c is: {}", edges.len(), c);
         }*/
-        let mut af = Affinity::new_and_init(edges, cluster_threshold);
+        let mut af = Affinity::new_and_init(&edges, cluster_threshold);
         af.clustering(FragmentProcess, CommonNeighborCluster);//CommonNeighborCluster为true表示对commonneighbor进行聚合
-        af.print_all_clusters();
+        //af.print_all_clusters();
         af
     }
 

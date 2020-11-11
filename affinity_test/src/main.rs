@@ -2,8 +2,8 @@ use core::cmp::max;
 use rand::Rng;
 use AffinityClustering::affinity_clustering;
 use std::fmt::{Display, Debug};
-use std::cmp::Eq;
-use ndarray::{Array3, ArrayBase};
+use std::cmp::{Eq};
+use ndarray::{Array3, ArrayBase, Array2};
 use std::collections::{HashSet, HashMap};
 use std::hash::Hash;
 use std::marker::Copy;
@@ -139,8 +139,8 @@ fn find_common_neighbors<T: Eq + Hash + Copy + Debug + Display>(edges: &Vec<Edge
         hash_edges.insert(pair);
     }
 
-    println!("the common neighbor edges is {}", new_edges.len());
-    affinity_clustering::print_edges(&new_edges);
+    //println!("the common neighbor edges is {}", new_edges.len());
+    //affinity_clustering::print_edges(&new_edges);
     new_edges
 }
 
@@ -191,7 +191,7 @@ fn RankSwap(line: Vec::<Node>, k: usize, r: usize, q: Vec::<usize>) -> Vec::<Nod
         divided_line.push(partition);
         cut_size.push(partition_size);
     }
-    println!("Present max cut size is: {}", find_max_size(&cut_size));
+    //println!("Present max cut size is: {}", find_max_size(&cut_size));
     println!("Begin to optimize the cut size");
     //划分完毕，开始配对
     /*let mut pairs = Vec::<HashMap::<usize, usize>>::new();
@@ -251,7 +251,7 @@ fn RankSwap(line: Vec::<Node>, k: usize, r: usize, q: Vec::<usize>) -> Vec::<Nod
     let mut count = 0;
     loop {
         count += 1;
-        println!("After rounds {}", count);
+        println!("After {} rounds swap ", count);
         let mut flag = 0;//标志变量，为0表示此轮没有进行交换，终止循环
         for (partition1, partition2) in &partition_pairs {
             for (interval1, interval2) in &hash_pair {
@@ -296,16 +296,28 @@ fn RankSwap(line: Vec::<Node>, k: usize, r: usize, q: Vec::<usize>) -> Vec::<Nod
             adjusted_line.append(&mut interval.clone());
         }
     }
-    println!("max cut size after optimize is: {}", find_max_size(&cut_size));
+    //println!("max cut size after optimize is: {}", find_max_size(&cut_size));
     adjusted_line
 }
 
 fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Node, Node), usize>) {
-    let vertex_num = line.len();
-    let mut total_weight = 0;
-    for i in 0..vertex_num {
-        total_weight += line[i].weight;
+    let beta = 0.2;
+    let mut node_position = HashMap::<Node, usize>::new();
+    for i in 0..line.len() {
+        node_position.insert(line[i], i);
     }
+    let vertex_num = line.len();
+    let mut total_node_weight = 0;
+    let mut total_edge_weight = 0;
+    let mut total_edge_length = 0;
+    for i in 0..vertex_num {
+        total_node_weight += line[i].weight;
+    }
+    for ((start, end), edge_weight) in &edges {
+        total_edge_weight += edge_weight;
+        total_edge_length += (node_position[start] as i32 - node_position[end] as i32).abs();
+    }
+    let edge_weight_per_length = total_edge_weight as f32 / total_edge_length as f32;
     let mut J = Array3::<usize>::zeros((vertex_num, vertex_num, vertex_num));
     //J存储从区间[i, j]到点k的边长度总和,以便后续计算使用
     for i in 0..vertex_num-1 {
@@ -323,7 +335,28 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Nod
     }
     println!("table J has been completed");
 
+    let mut D = Array2::<usize>::zeros((vertex_num, vertex_num));
+    //D存储在区间[i, j]内的边权总和，计算公式为D(i, j+1) = D(i, j) + J(i, j, j+1)
+    for i in 0..vertex_num-1 {
+        for j in i+1..vertex_num {
+            D[[i, j]] = D[[i, j-1]] + J[[i, j-1, j]];
+        }
+    }
+    println!("table D has been completed");
+    let mut B = Array2::<usize>::zeros((vertex_num, vertex_num));
+    //B存储在区间[i, j]内的点权总和，计算公式为B(i, j+1) = B(i, j) + w[j+1]
+    for i in 0..vertex_num {
+        B[[i, i]] = line[i].weight;
+    }//初始化B
+    for i in 0..vertex_num-1 {
+        for j in i+1..vertex_num {
+            B[[i, j]] = B[[i, j-1]] + line[j].weight;
+        }
+    }
+    println!("table B has been completed");
+
     let mut C = Array3::<usize>::zeros((vertex_num, vertex_num, vertex_num));
+    //C存储从区间[i, k]到区间[k, j]的边长度总和
     for i in 0..vertex_num-1 {
         for j in i+1..vertex_num {
             for cut_point in i..j {
@@ -336,26 +369,27 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Nod
         }
     }
     println!("table C has been completed");
-
     let mut A = Array3::<usize>::zeros((vertex_num, vertex_num, k+1));
     let mut Ap = ArrayBase::<ndarray::OwnedRepr<Vec::<usize>>, ndarray::Dim<[usize; 3]>>::default((vertex_num, vertex_num, k+1));
     //存储A(i, j, q)，即中间解
     //初始化A
+    println!("The average weight of cluster is: {}", total_node_weight as f32/k as f32 + (vertex_num/k) as f32 *edge_weight_per_length);
     for i in 0..vertex_num {
         for j in i.. vertex_num {
             let mut sum = 0;
             for ver in i..j+1 {
                 sum += line[ver].weight;
             }
-            if sum as f32 <= (1.0+alpha)*total_weight as f32/k as f32 {
-                A[[i, j, 1]] = 0;
+            sum += D[[i, j]];
+            if sum as f32 <= (1.0+alpha) * (total_node_weight as f32/k as f32 + (j-i) as f32 *edge_weight_per_length) {
+                A[[i, j, 1]] = sum;
             } else {
                 A[[i, j, 1]] = 1000000;//infinity
             }
         }
     }
     println!("begin to dynamic programing");
-    //开始动态规划计算
+    //开始动态规划
     let mut cut_point = Vec::<usize>::new();
     for q in 2..k+1 {
         for i in 0..vertex_num-1 {
@@ -364,7 +398,8 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Nod
                     let mut min_cut_point = i;
                     let mut min_cut_size = 1000000;
                     for cut_point in i..j {
-                        let cut_size_temp = A[[i, cut_point, 1]] + A[[cut_point+1, j, q-1]] + C[[i, j, cut_point]];
+                        //let cut_size_temp = max(A[[i, cut_point, 1]], A[[cut_point+1, j, q-1]]) + (beta * C[[i, j, cut_point]] as f32) as usize;
+                        let cut_size_temp = max(A[[i, cut_point, 1]], A[[cut_point+1, j, q-1]]);
                          if cut_size_temp < min_cut_size {
                              min_cut_size = cut_size_temp;
                              min_cut_point = cut_point;
@@ -378,10 +413,10 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Nod
             }
         }
     }
-    println!("dynamic programing accomplished!");
+    println!("dynamic programing finished!");
     //输出动态规划结果
-    println!("min cut size = {}", A[[0, vertex_num-1, k]]);
-    println!("min cut point is: {:?}", Ap[[0, vertex_num-1, k]]);
+    println!("The max cut size after dynamic programing is {}", A[[0, vertex_num-1, k]]);
+    println!("These cut point is: {:?}", Ap[[0, vertex_num-1, k]]);
 }
 
 fn Combination(af: affinity_clustering::Affinity::<Node>, partition_number: usize, interval_len: usize) -> Vec::<Node> {
@@ -394,8 +429,61 @@ fn Combination(af: affinity_clustering::Affinity::<Node>, partition_number: usiz
     adjusted_line
 }
 
-fn random_cluster_max_size(af: affinity_clustering::Affinity<Node>, partition_number: usize) {
+fn random_cluster_max_size(af: affinity_clustering::Affinity<Node>, partition_number: usize, edges: &Vec::<affinity_clustering::Edge<Node>>) {
     let mut line = af.linear_embed();
+    let hash_edges = get_hash_edges(&edges);
+    let vertex_num = af.V.len();
+    let mut J = Array3::<usize>::zeros((vertex_num, vertex_num, vertex_num));
+    //J存储从区间[i, j]到点k的边长度总和,以便后续计算使用
+    for i in 0..vertex_num-1 {
+        for j in i..vertex_num-1 {
+            for k in j+1..vertex_num {
+                let mut sum = 0;
+                for ver in i..j+1 {
+                    if let Some(weight) = hash_edges.get(&(line[ver], line[k])) {
+                        sum += weight;
+                    }
+                }
+                J[[i, j, k]] += sum;
+            }
+        } 
+    }
+    //println!("table J has been completed");
+
+    let mut D = Array2::<usize>::zeros((vertex_num, vertex_num));
+    //D存储在区间[i, j]内的边权总和，计算公式为D(i, j+1) = D(i, j) + J(i, j, j+1)
+    for i in 0..vertex_num-1 {
+        for j in i+1..vertex_num {
+            D[[i, j]] = D[[i, j-1]] + J[[i, j-1, j]];
+        }
+    }
+
+    let mut B = Array2::<usize>::zeros((vertex_num, vertex_num));
+    //B存储在区间[i, j]内的点权总和，计算公式为B(i, j+1) = B(i, j) + w[j+1]
+    for i in 0..vertex_num {
+        B[[i, i]] = line[i].weight;
+    }//初始化B
+    for i in 0..vertex_num-1 {
+        for j in i+1..vertex_num {
+            B[[i, j]] = B[[i, j-1]] + line[j].weight;
+        }
+    }
+
+    let mut C = Array3::<usize>::zeros((vertex_num, vertex_num, vertex_num));
+    //C存储从区间[i, k]到区间[k, j]的边长度总和
+    for i in 0..vertex_num-1 {
+        for j in i+1..vertex_num {
+            for cut_point in i..j {
+                let mut edges_weight_between = 0;
+                for end_point in cut_point..j+1 {
+                    edges_weight_between += J[[i, cut_point, end_point]];
+                }
+                C[[i, j, cut_point]] = edges_weight_between;
+            }
+        }
+    }
+
+
     let mut q = Vec::<usize>::new();
     for i in 0..partition_number+1 {
         q.push(((i*af.V.len()) as f32 / partition_number as f32).floor() as usize);
@@ -406,19 +494,23 @@ fn random_cluster_max_size(af: affinity_clustering::Affinity<Node>, partition_nu
         for j in q[i]..q[i+1] {
             partition_size += line[j].weight;
         }
-        divided_line_size.push(partition_size);
+        divided_line_size.push(partition_size + D[[q[i], q[i+1]-1]]);
     }
+    /*for i in 0..partition_number-1 {
+        divided_line_size[i] += (0.2*C[[q[i], q[i+2]-1, q[i+1]-1]] as f32) as usize;
+    }*/
     println!("The max cut size of ramdom divide is: {}", find_max_size(&divided_line_size));
 }
 
 fn main() {
-    let mut edges = make_random_graph(100);
+    let graph_scale = 100;
+    let partition_numbers = 10;
+    let mut edges = make_random_graph(graph_scale);
     let hash_edges = get_hash_edges(&edges);
     let new_edges = find_common_neighbors(&edges);
     let af = affinity_clustering::make_cluster(0.4, new_edges, 30, true, true);
-    let unclustering_af = affinity_clustering::Affinity::<Node>::new_and_init(edges, 10);
-    random_cluster_max_size(unclustering_af, 10);
-    let mut line_after_swap = Combination(af, 10, 5);
-    //let mut line = af.linear_embed();
-    DynamicProgram(line_after_swap, 10, 0.2, hash_edges);
+    let unclustering_af = affinity_clustering::Affinity::<Node>::new_and_init(&edges, partition_numbers);
+    random_cluster_max_size(unclustering_af, partition_numbers, &edges);
+    let mut line_after_swap = Combination(af, partition_numbers, 5);
+    DynamicProgram(line_after_swap, partition_numbers, 0.15, hash_edges);
 }

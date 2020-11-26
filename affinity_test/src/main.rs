@@ -380,7 +380,7 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Nod
                 sum += line[ver].weight;
             }
             sum += D[[i, j]];
-            if sum as f32 <= (1.0+alpha) * (total_node_weight as f32/k as f32 + (j-i) as f32 *edge_weight_per_length) {
+            if sum as f32 <= (1.0+alpha) * (total_node_weight as f32/k as f32 + (j-i) as f32 * edge_weight_per_length) {
                 A[[i, j, 1]] = sum;
             } else {
                 A[[i, j, 1]] = 1000000;//infinity
@@ -392,23 +392,28 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, alpha: f32, edges: HashMap::<(Nod
     let mut cut_point = Vec::<usize>::new();
     for q in 2..k+1 {
         //println!("now running in q = {}", q);
+        let left = q/2;
+        let right = q-q/2;
         for i in 0..vertex_num-1 {
             for j in i+1..vertex_num {
-                if q <= j-i {
+                if q <= j-i+1 {
                     let mut min_cut_point = i;
                     let mut min_cut_size = 1000000;
                     for cut_point in i..j {
-                        //let cut_size_temp = max(A[[i, cut_point, 1]], A[[cut_point+1, j, q-1]]) + (beta * C[[i, j, cut_point]] as f32) as usize;
-                        let cut_size_temp = max(A[[i, cut_point, 1]], A[[cut_point+1, j, q-1]]);
-                         if cut_size_temp < min_cut_size {
-                             min_cut_size = cut_size_temp;
-                             min_cut_point = cut_point;
-                         }
+                        if cut_point-i+1 >= left && j-cut_point+1 >= right {
+                            //let cut_size_temp = max(A[[i, cut_point, 1]], A[[cut_point+1, j, q-1]]) + (beta * C[[i, j, cut_point]] as f32) as usize;
+                            let cut_size_temp = max(A[[i, cut_point, left]], A[[cut_point+1, j, right]]);
+                            if cut_size_temp < min_cut_size {
+                                min_cut_size = cut_size_temp;
+                                min_cut_point = cut_point;
+                            }
+                        }
                     }
                     A[[i, j, q]] = min_cut_size;
-                    let mut present_best_cut_points = Ap[[min_cut_point+1, j, q-1]].clone();
-                    present_best_cut_points.push(min_cut_point);
-                    Ap[[i, j, q]] = present_best_cut_points;
+                    Ap[[i, j, q]] = Ap[[i, min_cut_point, left]].clone();
+                    Ap[[i, j, q]].push(min_cut_point);
+                    let mut right_part = Ap[[min_cut_point+1, j, right]].clone();
+                    Ap[[i, j, q]].append(&mut right_part);
                 }
             }
         }
@@ -505,15 +510,15 @@ fn random_cluster_max_size(af: affinity_clustering::Affinity<Node>, partition_nu
 fn main() {
     //let mut test_time = Vec::<f64>::new();
     let graph_scale = 200;
-    let partition_numbers = 5;
-    let mut edges = make_random_graph(graph_scale);
+    let partition_numbers = 2;
+    let edges = make_random_graph(graph_scale);
     let sw = Stopwatch::start_new();
     let hash_edges = get_hash_edges(&edges);    
     let new_edges = find_common_neighbors(&edges);
     let af = affinity_clustering::make_cluster(0.4, new_edges, graph_scale/10, true, true);
     //let unclustering_af = affinity_clustering::Affinity::<Node>::new_and_init(&edges, partition_numbers);
     //random_cluster_max_size(unclustering_af, partition_numbers, &edges);
-    let mut line_after_swap = Combination(af, partition_numbers, ((graph_scale/partition_numbers)as f32).sqrt() as usize);
+    let line_after_swap = Combination(af, partition_numbers, ((graph_scale/partition_numbers)as f32).sqrt() as usize);
     DynamicProgram(line_after_swap, partition_numbers, 0.4, hash_edges);
     println!("The running time is:{}", sw.elapsed_ms());
 }

@@ -123,7 +123,7 @@ pub mod affinity_clustering {
             let mut number_of_clusters = self.V.len();
             let mut vertexs = self.V.clone();
             let mut count = 0;
-            while number_of_clusters > self.k {
+            while number_of_clusters > self.k && count < 5 {
                 count += 1;
                 println!("-----------------------------------after {} rounds clustering-------------------------------", count);
                 self.clost_neighbors = HashMap::new();
@@ -165,12 +165,14 @@ pub mod affinity_clustering {
                     //self.print_all_clusters();
                 }
                 //print_edges(&self.E);
+                //self.print_all_clusters();
+                println!("present number of clusters is: {}", number_of_clusters);
             }
         }
 
         pub fn linear_embed(&self) -> Vec::<T> {
             let mut line = Vec::<T>::new();
-            for (name, cluster) in &self.uf.items {
+            for (_, cluster) in &self.uf.items {
                 line.append(&mut cluster.clone());
             }
             line
@@ -416,7 +418,7 @@ pub mod affinity_clustering {
         let n = v_set.len() as f32;
         let mut m = edges.len() as f32;
         let mut c: f32 = m.ln().ceil() / n.ln().ceil() - 1.0;
-        println!("total edges is:{}", edges.len());
+        //println!("total edges is:{}", edges.len());
         /*while c > epsilon {
             let k = (n.powf((c - epsilon) / 2.0).floor()) as usize;
             c = m.ln().ceil() / n.ln().ceil() - 1.0;

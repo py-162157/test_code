@@ -1,5 +1,5 @@
 [package]
-name = "AffinityClustering"
+name = "test_transform"
 version = "0.1.0"
 authors = ["py-162157 <765007043@qq.com>"]
 edition = "2018"
@@ -7,6 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ndarray = "0.13.1"
-rand = "0.7.3"
 indradb-lib = "1.1.0"
+uuid = "0.8.1"
+serde_json = "1.0.56"

@@ -1,19 +1,9 @@
-trait Run {
-}
-struct Human {
-}
-impl Run for Human {
-}
-struct Cat {
-}
-impl Run for Cat {
-}
-fn demo(x: i32) -> impl Run {
-    if x > 0 {
-        Human {}
-    } else {
-        Cat {}
-    }
-}
+use glommio::LocalExecutorBuilder;
+
 fn main() {
+    let handle = LocalExecutorBuilder::new().spawn(|| async move {
+        println!("hello");
+    }).unwrap();
+    
+    handle.join().unwrap();
 }

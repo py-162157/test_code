@@ -1,5 +1,5 @@
 [package]
-name = "lifetimes"
+name = "glommio_test"
 version = "0.1.0"
 authors = ["py-162157 <765007043@qq.com>"]
 edition = "2018"
@@ -7,4 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-glommio = "0.3.1"
+glommio = "0.2.0-alpha"
+futures-lite = "1.11.3"

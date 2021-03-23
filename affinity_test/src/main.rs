@@ -421,7 +421,7 @@ pub fn make_cluster<T:Debug + Display + Copy + Hash + Eq>(epsilon: f32, mut edge
     let mut m = edges.len() as f32;
     let mut c: f32 = m.ln().ceil() / n.ln().ceil() - 1.0;
     //println!("total edges is:{}", edges.len());
-    /*while c > epsilon {
+    while c > epsilon {
         let k = (n.powf((c - epsilon) / 2.0).floor()) as usize;
         c = m.ln().ceil() / n.ln().ceil() - 1.0;
         let eev = edges_of_every_vertexs(&edges);
@@ -431,7 +431,7 @@ pub fn make_cluster<T:Debug + Display + Copy + Hash + Eq>(epsilon: f32, mut edge
         edges = group_and_MST(full_partition);
         m = edges.len() as f32;
         println!("total edges of MST is:{}, present c is: {}", edges.len(), c);
-    }*/
+    }
     let mut af = Affinity::new_and_init(&edges, cluster_threshold);
     af.clustering(FragmentProcess, CommonNeighborCluster);//CommonNeighborCluster为true表示对commonneighbor进行聚合
     //af.print_all_clusters();

@@ -1,21 +1,22 @@
-use glommio::{Async, LocalExecutor};
+use glommio::LocalExecutor;
 use glommio::timer::Timer;
-use futures_lite::{future::FutureExt, io};
+use futures_lite::{future::FutureExt};
+use glommio::net::TcpStream;
 
-use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
+use std::io;
 
-fn main() {
-    let local_ex = LocalExecutor::make_default();
-    local_ex.run(async {
-        let addr = "127.0.0.1110::80".to_socket_addrs()?.next().unwrap();
-        let stream = Async::<TcpStream>::connect(addr).or(async {
+fn main()-> Result<(), std::io::Error> {
+    let local_ex = LocalExecutor::default();
+    let _  = local_ex.run(async {
+        let timeout = async {
             Timer::new(Duration::from_secs(10)).await;
-            Err(io::ErrorKind::TimedOut.into())
-        })
-        .await?;
+            Err(io::Error::new(io::ErrorKind::TimedOut, "").into())
+        };
+        let stream = TcpStream::connect("127.0.0.1000::80").or(timeout).await?;
         std::io::Result::Ok(())
     });
+    Ok(())
 }
 
 

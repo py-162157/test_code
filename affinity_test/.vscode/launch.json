@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'server'",
+            "name": "Debug executable 'affinity_test'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=server",
-                    "--package=server"
+                    "--bin=affinity_test",
+                    "--package=affinity_test"
                 ],
                 "filter": {
-                    "name": "server",
+                    "name": "affinity_test",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'server'",
+            "name": "Debug unit tests in executable 'affinity_test'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=server",
-                    "--package=server"
+                    "--bin=affinity_test",
+                    "--package=affinity_test"
                 ],
                 "filter": {
-                    "name": "server",
+                    "name": "affinity_test",
                     "kind": "bin"
                 }
             },

@@ -6,7 +6,7 @@ use ndarray::{Array3, ArrayBase, Array2};
 use std::collections::{HashSet, HashMap};
 use std::hash::Hash;
 use std::marker::Copy;
-use std::cmp::{PartialEq, Ord};
+use std::cmp::{PartialEq};
 extern crate stopwatch;
 use stopwatch::{Stopwatch};
 
@@ -33,7 +33,7 @@ impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
             v_set.insert(e.end, None);
         }
         let v: Vec::<T> = v_set.keys().into_iter().map(|&x| x).collect();
-        //println!("number of vertexs is:{}", v.len());
+        println!("number of vertexs is:{}", v.len());
         Affinity {
             k: k,
             E: edges.clone(),
@@ -60,10 +60,12 @@ impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
                 if v == *self_cloest_cloest {
                     let findv = self.uf.find(v);
                     let find_clost_neighbor = self.uf.find(*self_closet);
-                    self.uf.union(findv, find_clost_neighbor);//出现所有权问题，考虑将调用的函数设为&mut self
+                    let tag = self.uf.try_union(findv, find_clost_neighbor);//出现所有权问题，考虑将调用的函数设为&mut self
                     //可直接写为self.uf.union(self.uf.find(v), self.uf.find(*self.clost_neighbors.get(&v).unwrap()))， 考虑到对find函数的多次调用
-                    self.merged.insert(v, None);
-                    self.merged.insert(*self_closet, None);
+                    if tag == true {
+                        self.merged.insert(v, None);
+                        self.merged.insert(*self_closet, None);
+                    }
                     return v_stack;
                 } else {
                     let findv = self.uf.find(v);
@@ -73,10 +75,15 @@ impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
                         return v_stack;
                     } else {
                         v_stack.insert(v, None);
-                        v_stack = self.merge_with_cloest_neighbors(*self_closet, v_stack);
+                        unsafe {
+                            v_stack = self.merge_with_cloest_neighbors(self_closet.clone(), v_stack);
+                        }
                         v_stack.remove(&v);
-                        self.uf.union(findv, find_clost_neighbor);
-                        self.merged.insert(v, None);
+                        let tag = self.uf.try_union(findv, find_clost_neighbor);
+                        if tag == true {
+                            self.merged.insert(v, None);
+                            self.merged.insert(*self.clost_neighbors.get(&v).unwrap(), None);
+                        }
                         return  v_stack;
                     }
                 }
@@ -99,7 +106,7 @@ impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
                     edges_of_group.sort_by_key(|x| x.weight);
                     for e in &edges_of_group {
                         if self.uf.find(e.end) != group_name {
-                            self.uf.union(group_name, e.end);
+                            let atg = self.uf.try_union(group_name, e.end);
                         }
                     }
                 }
@@ -134,6 +141,7 @@ impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
             let mut EEV = edges_of_every_vertexs(selfe);
             let mut min_edges = Vec::<Edge_py<T>>::new();
             let mut v_stack = HashMap::<T, Option<T>>::new();
+            //println!("EEV number is:{}", EEV.len());
 
             for value in EEV.values_mut() {
                 value.sort_by_key(|x| x.weight);
@@ -177,6 +185,7 @@ impl<T:Debug + Display + Copy + Hash + Eq> Affinity<T> {
         for (_, cluster) in &self.uf.items {
             line.append(&mut cluster.clone());
         }
+        println!("   ");
         line
     }
 }
@@ -189,7 +198,14 @@ pub fn edges_of_every_vertexs<T:Debug + Display + Copy + Hash + Eq> (edges: &Vec
         } else {
             edges_of_v.insert(edge.start, vec!(edge.clone()));
         }
+
+        if edges_of_v.contains_key(&edge.end) {
+            edges_of_v.get_mut(&edge.end).unwrap().push(edge.clone());
+        } else {
+            edges_of_v.insert(edge.end, vec!(edge.clone()));
+        }
     }
+    println!("   ");
     edges_of_v
 }
 
@@ -205,6 +221,7 @@ impl<T:Debug + Display + Copy + Hash + Eq> ArrayUnion<T> {
             ArrUni.size.insert(v, 1);
             ArrUni.items.insert(v, vec!(v));
         }
+        println!("   ");
         ArrUni
     }
 
@@ -216,10 +233,15 @@ impl<T:Debug + Display + Copy + Hash + Eq> ArrayUnion<T> {
             }
     }
 
-    fn union(&mut self, mut a: T, mut b: T) {
+    fn try_union(&mut self, mut a: T, mut b: T) -> bool {
         if !(self.items.contains_key(&a) && self.items.contains_key(&b)) {
-            //panic!("Error: a and b are not both in items");
-            return ;
+            //println!("Error: a and b are not both in items");
+            return false
+        }
+
+        if self.items.get(&a) == self.items.get(&b) {
+            println!("Error: These two group are in a same items");
+            return false
         }
 
         if self.size.get(&a).unwrap() > self.size.get(&b).unwrap() {
@@ -227,28 +249,31 @@ impl<T:Debug + Display + Copy + Hash + Eq> ArrayUnion<T> {
             a = b;
             b = temp;
         }
-
-        for s in self.items.clone().get_mut(&a) {
+        
+        for s in self.items.clone().get(&a).unwrap() {
             if let Some(x) = self.group.get_mut(&a) {
                 *x = b
             } else {
-                panic!("Failed to get a from items a");
+                println!("Failed to get group from items a");
+                return false
             }
 
             if let Some(x) = self.items.get_mut(&b) {
-                (*x).append(s);
+                (*x).push(*s);
             } else {
-                panic!("Failed to get a from items b");
+                println!("Failed to get group from items b");
+                return false
             }
         }
 
         *self.size.get_mut(&b).unwrap() += *self.size.get(&a).unwrap();
         self.size.remove(&a);
         self.items.remove(&a);
+        true
     }
 
     fn get_items(&self) -> Vec::<T> {
-        self.items.keys().into_iter().map(|&x| x).collect()//将hashmap中所有key或者value输出的方法
+        self.items.keys().into_iter().map(|&x| x).collect()//将hashmap中所有key或者value输出
     }
 }
 
@@ -294,7 +319,7 @@ fn MST<T:Debug + Display + Copy + Hash + Eq> (edges: &mut Vec::<Edge_py<T>>) -> 
         
         if u_group != v_group {
             mst.push(e.clone());
-            UF.union(u_group, v_group)
+            let tag = UF.try_union(u_group, v_group);
         }
     }
     mst
@@ -363,7 +388,8 @@ fn partition2<T:Debug + Display + Copy + Hash + Eq> (v_edges: &HashMap::<T, Vec:
     out
 }
 
-pub fn make_random_graph_matrix (verticle: usize) -> (Array2::<usize>, Vec::<Edge_py<usize>>) {//随机生成一个图，usize类型不满足ndarray::IntoDimension特征，故verticle用usize
+pub fn make_random_graph_matrix (verticle: usize) -> (Array2::<usize>, Vec::<Edge_py<usize>>) {
+    //随机生成一个图，usize类型不满足ndarray::IntoDimension特征，故verticle用usize
     let mut data = Array2::<usize>::zeros((verticle, verticle));
     let mut i = 0;
     let mut j = 0;
@@ -421,7 +447,7 @@ pub fn make_cluster<T:Debug + Display + Copy + Hash + Eq>(epsilon: f32, mut edge
     let mut m = edges.len() as f32;
     let mut c: f32 = m.ln().ceil() / n.ln().ceil() - 1.0;
     //println!("total edges is:{}", edges.len());
-    while c > epsilon {
+    /*while c > epsilon {
         let k = (n.powf((c - epsilon) / 2.0).floor()) as usize;
         c = m.ln().ceil() / n.ln().ceil() - 1.0;
         let eev = edges_of_every_vertexs(&edges);
@@ -431,7 +457,7 @@ pub fn make_cluster<T:Debug + Display + Copy + Hash + Eq>(epsilon: f32, mut edge
         edges = group_and_MST(full_partition);
         m = edges.len() as f32;
         println!("total edges of MST is:{}, present c is: {}", edges.len(), c);
-    }
+    }*/
     let mut af = Affinity::new_and_init(&edges, cluster_threshold);
     af.clustering(FragmentProcess, CommonNeighborCluster);//CommonNeighborCluster为true表示对commonneighbor进行聚合
     //af.print_all_clusters();
@@ -471,7 +497,8 @@ impl Node {
     }
 }
 
-fn make_fat_tree(k: usize) -> Vec::<Edge_py<Node>> {
+fn make_fat_tree(k: usize, low: usize, high: usize, noise_weight: usize, noise_rate: u32)
+    -> Vec::<Edge_py<Node>> {
     let mut edges = Vec::<Edge_py<Node>>::new();
     let mut kernel_node = Vec::<Node>::new();
     let mut pods = Vec::<(Vec::<Node>, Vec::<Node>)>::new();
@@ -479,7 +506,12 @@ fn make_fat_tree(k: usize) -> Vec::<Edge_py<Node>> {
     let mut count = 0;
     //生成节点
     for _ in 0..k*k/4 {
-        let r_w = rand::thread_rng().gen_range(3, 6);
+        let r_w: usize;
+        if rand::thread_rng().gen_ratio(noise_rate, 100) {
+            r_w = noise_weight;
+        } else {
+            r_w = rand::thread_rng().gen_range(low, high);
+        }
         let node = Node::new(count, r_w);
         kernel_node.push(node);
         count += 1;
@@ -487,13 +519,23 @@ fn make_fat_tree(k: usize) -> Vec::<Edge_py<Node>> {
     for _ in 0..k {
         let mut pod = (Vec::<Node>::new(), Vec::<Node>::new());
         for _ in 0..k/2 {
-            let r_w = rand::thread_rng().gen_range(3, 6);
+            let r_w: usize;
+            if rand::thread_rng().gen_ratio(noise_rate, 100) {
+                r_w = noise_weight;
+            } else {
+                r_w = rand::thread_rng().gen_range(low, high);
+            }
             let node = Node::new(count, r_w);
             pod.0.push(node);
             count += 1;
         }
         for _ in 0..k/2 {
-            let r_w = rand::thread_rng().gen_range(3, 6);
+            let r_w: usize;
+            if rand::thread_rng().gen_ratio(noise_rate, 100) {
+                r_w = noise_weight;
+            } else {
+                r_w = rand::thread_rng().gen_range(low, high);
+            }
             let node = Node::new(count, r_w);
             pod.1.push(node);
             count += 1;
@@ -505,7 +547,12 @@ fn make_fat_tree(k: usize) -> Vec::<Edge_py<Node>> {
         for _ in 0..k/2 {
             let mut access_servers = Vec::<Node>::new();
             for _ in 0..k/2 {
-                let r_w = rand::thread_rng().gen_range(3, 6);
+                let r_w: usize;
+            if rand::thread_rng().gen_ratio(noise_rate, 100) {
+                r_w = noise_weight;
+            } else {
+                r_w = rand::thread_rng().gen_range(low, high);
+            }
                 let node = Node::new(count, r_w);
                 access_servers.push(node);
                 count += 1;
@@ -578,11 +625,11 @@ fn make_random_graph (verticle: usize) ->  Vec::<Edge_py<Node>> {//随机生成�
     let mut j = 0;
     let mut edges = Vec::<Edge_py<Node>>::new();
     let mut random_weight = Vec::<usize>::new();
-    for i in 0..verticle/10 {
+    for _ in 0..verticle/10 {
         let r_w = rand::thread_rng().gen_range(30, 51);
         random_weight.push(r_w);
     }
-    for i in verticle/10..verticle {
+    for _ in verticle/10..verticle {
         let r_w = rand::thread_rng().gen_range(1, 6);
         random_weight.push(r_w);
     }
@@ -843,6 +890,8 @@ fn DynamicProgram(line: Vec::<Node>, k: usize, edges: HashMap::<(Node, Node), us
     for i in 0..line.len() {
         node_position.insert(line[i], i);
     }
+    //println!("the length of line is: {}", line.len());
+    //rintln!("the length oSf node_position is: {}", node_position.len());
     let vertex_num = line.len();
     let mut total_node_weight = 0;
     let mut total_edge_weight = 0;
@@ -1015,7 +1064,8 @@ fn random_mock(graph_scale: usize, partition_number: usize, rank_swap: bool, ran
        while "rank" mode pair the largest interval with the smallest one, may raise edges cut off.
     // rank_swap: weather to implement rank_swap algorithm
 */
-    let edges = make_fat_tree(graph_scale);
+    let edges = make_fat_tree(graph_scale, 3, 6, 100, 10);
+    //let edges = make_random_graph(600);
 
     let mut vertex_set = HashSet::<Node>::new();
     for i in 0..edges.len() {
@@ -1027,12 +1077,12 @@ fn random_mock(graph_scale: usize, partition_number: usize, rank_swap: bool, ran
     let sw = Stopwatch::start_new();
     let hash_edges = get_hash_edges(&edges);    
     let new_edges = find_common_neighbors(&edges);
-    let af = make_cluster(0.4, new_edges, cluster_threshold, false, true);
-    let line_after_swap = Combination(af, partition_number, ((graph_scale/partition_number)as f32).sqrt() as usize, rank_swap);
+    let af = make_cluster(0.4,  new_edges, cluster_threshold, true, true);
+    let line_after_swap = Combination(af, partition_number, ((graph_scale.pow(3)/(4*partition_number))as f32).sqrt() as usize, rank_swap);
     DynamicProgram(line_after_swap, partition_number, hash_edges);
     println!("The running time is:{}", sw.elapsed_ms());
 }
 
 fn main() {
-    random_mock(10, 33, false, "rank".to_string(), 10);
+    random_mock(12, 16, true, "rank".to_string(), 10);
 }
